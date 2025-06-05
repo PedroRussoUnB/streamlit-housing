@@ -15,7 +15,6 @@ import warnings
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="Análise Imobiliária - Ames", layout="wide")
 
-# ===================== INÍCIO DA CORREÇÃO (CABEÇALHO FIXO) =====================
 
 # Injeta HTML e CSS para criar um cabeçalho fixo no topo da página
 header_html = """
@@ -58,12 +57,8 @@ header_html = """
 """
 st.markdown(header_html, unsafe_allow_html=True)
 
-# O título antigo foi removido daqui e incorporado no cabeçalho acima
 # st.title("...")
 # st.markdown("...")
-
-# ===================== FIM DA CORREÇÃO =====================
-
 
 # --- CARREGAMENTO E CACHE DOS DADOS ---
 @st.cache_data
