@@ -15,6 +15,7 @@ import warnings
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="Análise Imobiliária - Ames", layout="wide")
 
+# --- CABEÇALHO FIXO COM CSS ---
 header_html = """
 <style>
     #app-header {
@@ -55,7 +56,7 @@ st.markdown(header_html, unsafe_allow_html=True)
 @st.cache_data
 def load_data():
     """Carrega e faz um pré-processamento leve nos dados."""
-    df_loaded = pd.read_csv("AmesHousing.csv") # Use um nome diferente para evitar conflito
+    df_loaded = pd.read_csv("AmesHousing.csv")
     df_loaded.columns = df_loaded.columns.str.replace(' ', '')
     
     numeric_cols_to_impute = ['MasVnrArea', 'BsmtFinSF1', 'TotalBsmtSF', 'GarageCars', 'OverallQual']
@@ -79,13 +80,12 @@ st.sidebar.markdown("---")
 st.sidebar.header("Filtros Gerais")
 st.sidebar.markdown("Filtre os dados para refinar as análises em todas as abas.")
 
-# Certificar que OverallQual existe e tem valores únicos antes de usar no filtro
 if 'OverallQual' in df_original.columns and not df_original['OverallQual'].empty:
     overall_qual_options = sorted(df_original['OverallQual'].unique())
     default_overall_qual = overall_qual_options
 else:
-    overall_qual_options = [0] # Placeholder
-    default_overall_qual = [0] # Placeholder
+    overall_qual_options = [0]
+    default_overall_qual = [0]
 
 qualidade_geral = st.sidebar.multiselect(
     'Filtre por Qualidade Geral do Imóvel:',
@@ -96,7 +96,7 @@ qualidade_geral = st.sidebar.multiselect(
 if 'YearBuilt' in df_original.columns and not df_original['YearBuilt'].empty:
     ano_min_orig, ano_max_orig = int(df_original['YearBuilt'].min()), int(df_original['YearBuilt'].max())
 else:
-    ano_min_orig, ano_max_orig = 1900, 2020 # Placeholders
+    ano_min_orig, ano_max_orig = 1900, 2020
 
 ano_range = st.sidebar.slider(
     'Filtre por Ano de Construção:',
@@ -105,9 +105,7 @@ ano_range = st.sidebar.slider(
     value=(ano_min_orig, ano_max_orig)
 )
 
-# Aplicar filtros ao DataFrame
-# Renomeia a variável 'df' aqui para 'df_filtered' para clareza
-df_filtered = df_original.copy() # Começa com uma cópia do original
+df_filtered = df_original.copy()
 if 'OverallQual' in df_filtered.columns:
     df_filtered = df_filtered[df_filtered['OverallQual'].isin(qualidade_geral)]
 if 'YearBuilt' in df_filtered.columns:
@@ -134,13 +132,21 @@ if aba == "📊 Visão Geral":
             st.pyplot(fig)
 
         with col2:
-            st.subheader("Preço de Venda vs. Área Construída")
-            fig, ax = plt.subplots()
-            sns.scatterplot(data=df_filtered, x='GrLivArea', y='SalePrice', alpha=0.5, ax=ax)
-            ax.set_title("Preço de Venda vs. Área de Estar (GrLivArea)")
-            ax.set_xlabel("Área de Estar (Pés Quadrados)")
-            ax.set_ylabel("Preço de Venda ($)")
-            st.pyplot(fig)
+            st.subheader("Preço de Venda vs. Outra Variável")
+            numeric_cols_scatter = [col for col in df_filtered.select_dtypes(include=np.number).columns if col not in ['PID', 'Id', 'SalePrice']]
+            if numeric_cols_scatter:
+                default_scatter_var = 'GrLivArea' if 'GrLivArea' in numeric_cols_scatter else numeric_cols_scatter[0]
+                
+                x_axis_var = st.selectbox("Escolha a variável para o eixo X:", options=numeric_cols_scatter, index=numeric_cols_scatter.index(default_scatter_var))
+                
+                fig, ax = plt.subplots()
+                sns.scatterplot(data=df_filtered, x=x_axis_var, y='SalePrice', alpha=0.5, ax=ax)
+                ax.set_title(f"Preço de Venda vs. {x_axis_var}")
+                ax.set_xlabel(x_axis_var)
+                ax.set_ylabel("Preço de Venda ($)")
+                st.pyplot(fig)
+            else:
+                st.info("Nenhuma variável numérica disponível para o gráfico de dispersão.")
             
         st.subheader("Amostra dos Dados")
         st.dataframe(df_filtered.head())
@@ -156,7 +162,6 @@ elif aba == "📈 Etapa I – ANOVA":
     entre diferentes categorias de uma variável escolhida. O usuário deve selecionar de 2 a 3 variáveis sequencialmente para análise.
     """)
 
-    # Seleção de variáveis
     cat_cols_anova = [col for col in df_filtered.select_dtypes(include=['object', 'category']).columns if df_filtered[col].nunique() < 10 and df_filtered[col].nunique() > 1]
     
     if not cat_cols_anova:
@@ -174,7 +179,6 @@ elif aba == "📈 Etapa I – ANOVA":
             st.markdown("---")
             st.subheader(f"Análise de 'SalePrice' por '{var_cat}'")
 
-            # Visualização: Boxplot
             st.write("*Visualização da Distribuição:*")
             fig, ax = plt.subplots(figsize=(12, 6))
             sns.boxplot(data=df_filtered, x=var_cat, y='SalePrice', ax=ax)
@@ -187,7 +191,6 @@ elif aba == "📈 Etapa I – ANOVA":
             st.markdown("---")
             st.subheader("2. Verificação dos Pressupostos da ANOVA")
 
-            # Remover NaNs para o modelo ANOVA especificamente
             df_anova_current = df_filtered[[var_cat, 'SalePrice']].dropna()
 
             if df_anova_current.empty or df_anova_current[var_cat].nunique() < 2:
@@ -201,9 +204,8 @@ elif aba == "📈 Etapa I – ANOVA":
                     st.error(f"Não foi possível ajustar o modelo para os resíduos. Erro: {e}")
                     st.stop()
                 
-                # a) Pressuposto de Normalidade dos Resíduos (Shapiro-Wilk)
                 st.markdown("*a) Normalidade dos Resíduos*")
-                if len(residuals) > 2: # Shapiro-Wilk precisa de pelo menos 3 amostras
+                if len(residuals) > 2:
                     shapiro_test = stats.shapiro(residuals)
                     p_valor_shapiro = shapiro_test.pvalue
                     if p_valor_shapiro < 0.05:
@@ -216,14 +218,13 @@ elif aba == "📈 Etapa I – ANOVA":
                     st.pyplot(fig_qq)
                 else:
                     st.warning("Não há resíduos suficientes para o teste de Shapiro-Wilk.")
-                    p_valor_shapiro = 0 # Assume violado para forçar Kruskal-Wallis
+                    p_valor_shapiro = 0
 
-                # b) Pressuposto de Homocedasticidade (Teste de Levene)
                 st.markdown("*b) Homocedasticidade*")
                 groups = [df_anova_current['SalePrice'][df_anova_current[var_cat] == g] for g in df_anova_current[var_cat].unique()]
-                groups_for_levene = [g for g in groups if len(g) > 1] # Levene precisa de grupos com >1 amostra
+                groups_for_levene = [g for g in groups if len(g) > 1]
                 
-                if len(groups_for_levene) > 1: # Levene precisa de pelo menos 2 grupos
+                if len(groups_for_levene) > 1:
                     levene_test = stats.levene(*groups_for_levene)
                     p_valor_levene = levene_test.pvalue
                     if p_valor_levene < 0.05:
@@ -232,12 +233,11 @@ elif aba == "📈 Etapa I – ANOVA":
                         st.success(f"*Pressuposto atendido:* As variâncias são homogêneas entre os grupos (p-valor do teste de Levene = {p_valor_levene:.4f}).")
                 else:
                     st.warning("Não há grupos suficientes para realizar o teste de Levene.")
-                    p_valor_levene = 0 # Assume violado
+                    p_valor_levene = 0
 
                 st.markdown("---")
                 st.subheader("3. Resultados do Teste Estatístico e Interpretação")
                 
-                # Decisão sobre qual teste usar
                 if p_valor_shapiro >= 0.05 and p_valor_levene >= 0.05:
                     st.info("*Teste Aplicado: ANOVA* (pois os pressupostos foram atendidos).")
                     anova_table = sm.stats.anova_lm(model_anova, typ=2)
@@ -245,25 +245,25 @@ elif aba == "📈 Etapa I – ANOVA":
                     st.dataframe(anova_table)
                     p_valor_final = anova_table.iloc[0]['PR(>F)']
                     if p_valor_final < 0.05:
-                        st.success(f"*Conclusão (ANOVA):* Existe uma diferença estatisticamente significativa nos preços médios de venda entre as diferentes categorias de '{var_cat}' (p-valor = {p_valor_final:.4f}). Categorias com médias mais altas podem indicar maior valorização.")
+                        st.success(f"*Conclusão (ANOVA):* Existe uma diferença estatisticamente significativa nos preços médios de venda entre as diferentes categorias de '{var_cat}' (p-valor = {p_valor_final:.4f}).")
                     else:
-                        st.warning(f"*Conclusão (ANOVA):* Não há evidência de uma diferença estatisticamente significativa nos preços médios de venda para '{var_cat}' (p-valor = {p_valor_final:.4f}).")
+                        st.warning(f"*Conclusão (ANOVA):* Não há evidência de uma diferença estatisticamente significativa para '{var_cat}' (p-valor = {p_valor_final:.4f}).")
 
                 else:
                     st.info("*Teste Aplicado: Kruskal-Wallis* (alternativa não paramétrica, pois um ou mais pressupostos da ANOVA foram violados).")
-                    if len(groups) > 1 : # Kruskal-Wallis precisa de pelo menos 2 grupos
+                    if len(groups) > 1 :
                         kruskal_test = stats.kruskal(*groups)
                         p_valor_kruskal = kruskal_test.pvalue
                         st.write(f"*Estatística H (Kruskal-Wallis):* {kruskal_test.statistic:.4f}")
                         st.write(f"*P-valor:* {p_valor_kruskal:.4f}")
                         if p_valor_kruskal < 0.05:
-                            st.success(f"*Conclusão (Kruskal-Wallis):* Existe uma diferença estatisticamente significativa nas distribuições de preço de venda entre as diferentes categorias de '{var_cat}' (p-valor = {p_valor_kruskal:.4f}). Isso sugere que '{var_cat}' influencia o preço.")
+                            st.success(f"*Conclusão (Kruskal-Wallis):* Existe uma diferença estatisticamente significativa nas distribuições de preço para '{var_cat}' (p-valor = {p_valor_kruskal:.4f}).")
                         else:
-                            st.warning(f"*Conclusão (Kruskal-Wallis):* Não há evidência de uma diferença significativa nas distribuições de preço para '{var_cat}' (p-valor = {p_valor_kruskal:.4f}).")
+                            st.warning(f"*Conclusão (Kruskal-Wallis):* Não há evidência de uma diferença significativa para '{var_cat}' (p-valor = {p_valor_kruskal:.4f}).")
                     else:
-                        st.error("Não foi possível realizar o teste de Kruskal-Wallis devido ao número insuficiente de grupos.")
+                        st.error("Não foi possível realizar o teste de Kruskal-Wallis.")
                 
-                st.markdown(f"*Orientação para Corretores/Investidores:* Se '{var_cat}' mostrou impacto significativo, foque nas categorias de maior valor para maximizar retornos ou comissões. Se não, esta característica pode não ser um diferencial de preço primário.")
+                st.markdown(f"*Orientação para Corretores/Investidores:* Se '{var_cat}' mostrou impacto significativo, foque nas categorias de maior valor.")
         elif df_filtered.empty:
             st.warning("Nenhum dado disponível após a aplicação dos filtros para realizar a ANOVA.")
 
@@ -272,7 +272,7 @@ elif aba == "📈 Etapa I – ANOVA":
 elif aba == "📉 Etapa II – Regressão":
     st.header("📉 Modelagem Preditiva com Regressão Linear")
     st.markdown("""
-    *Objetivo:* Construir um modelo para prever o SalePrice com base em múltiplas características do imóvel (4 a 6 variáveis, com pelo menos 1 contínua e 1 categórica).
+    *Objetivo:* Construir um modelo para prever o SalePrice com base em múltiplas características do imóvel.
     """)
 
     if df_filtered.empty:
@@ -281,12 +281,10 @@ elif aba == "📉 Etapa II – Regressão":
         st.subheader("1. Seleção de Variáveis e Transformação")
         
         num_cols_reg = df_filtered.select_dtypes(include=np.number).columns.tolist()
-        # Remover 'PID' e 'SalePrice' das opções de variáveis explicativas numéricas
         num_cols_reg = [col for col in num_cols_reg if col not in ['PID', 'SalePrice', 'Id']]
 
         cat_cols_reg = [col for col in df_filtered.select_dtypes(include=['object', 'category']).columns if df_filtered[col].nunique() < 20 and df_filtered[col].nunique() > 1]
         
-        # Garantir que as colunas padrão existam e sejam válidas
         desired_cat_defaults = ['MSZoning', 'HouseStyle', 'BldgType']
         actual_cat_defaults = [col for col in desired_cat_defaults if col in cat_cols_reg]
         
@@ -296,49 +294,67 @@ elif aba == "📉 Etapa II – Regressão":
         col1_reg, col2_reg = st.columns(2)
         with col1_reg:
             vars_cont = st.multiselect(
-                "*Escolha variáveis contínuas (numéricas) (1 ou mais):*",
+                "*Escolha variáveis contínuas (numéricas):*",
                 options=num_cols_reg,
                 default=actual_num_defaults
             )
         with col2_reg:
-            vars_cat_reg = st.multiselect( # Renomeado para vars_cat_reg para evitar conflito com a ANOVA
-                "*Escolha variáveis categóricas (1 ou mais):*",
+            vars_cat_reg = st.multiselect(
+                "*Escolha variáveis categóricas:*",
                 options=cat_cols_reg,
                 default=actual_cat_defaults
             )
             
         log_transform = st.checkbox("Aplicar transformação logarítmica em SalePrice e nas variáveis contínuas? (Modelo Log-Log)", value=True)
 
-        if len(vars_cont) >= 1 and len(vars_cat_reg) >= 1 and (len(vars_cont) + len(vars_cat_reg)) >= 4 and (len(vars_cont) + len(vars_cat_reg)) <= 6 :
+        if len(vars_cont) >= 1 and len(vars_cat_reg) >= 1:
             st.markdown("---")
-            st.subheader("2. Ajuste do Modelo e Resultados")
+
+            st.subheader("2. Análise Visual da Linearidade")
+            st.markdown("Abaixo estão os gráficos de dispersão para cada variável contínua selecionada versus o SalePrice. Isso ajuda a verificar visualmente a premissa de linearidade.")
             
-            # Preparação dos dados para o modelo
+            num_plots = len(vars_cont)
+            cols_per_row = 3
+            plot_cols = st.columns(cols_per_row)
+            
+            for i, var in enumerate(vars_cont):
+                with plot_cols[i % cols_per_row]:
+                    fig_reg, ax_reg = plt.subplots()
+                    sns.regplot(data=df_filtered, x=var, y='SalePrice', ax=ax_reg, line_kws={"color": "red"}, scatter_kws={'alpha': 0.3})
+                    ax_reg.set_title(f"SalePrice vs. {var}", fontsize=10)
+                    ax_reg.set_xlabel(var, fontsize=8)
+                    ax_reg.set_ylabel("SalePrice", fontsize=8)
+                    st.pyplot(fig_reg)
+            
+            st.markdown("---")
+            st.subheader("3. Ajuste do Modelo e Resultados")
+            
+            # Preparação dos dados
             cols_for_model = ['SalePrice'] + vars_cont + vars_cat_reg
-            df_model = df_filtered[cols_for_model].copy().dropna() # Usar cópia e tratar NaNs
+            df_model = df_filtered[cols_for_model].copy().dropna()
+            
+            y = df_model['SalePrice']
+            X_vars = df_model[vars_cont + vars_cat_reg]
 
-            if df_model.shape[0] < (len(vars_cont) + df_model.nunique().sum() + 1): # Heurística para dados suficientes
-                 st.error(f"Dados insuficientes ({df_model.shape[0]} linhas) para o número de preditores após tratar NaNs. Tente outros filtros ou variáveis.")
+            if log_transform:
+                y = np.log1p(y)
+                for col in vars_cont:
+                    if pd.api.types.is_numeric_dtype(X_vars[col]):
+                        if (X_vars[col] >= 0).all():
+                            X_vars[col] = np.log1p(X_vars[col])
+                        else:
+                            st.warning(f"Variável {col} não transformada com log1p pois contém valores negativos.")
+
+            X_vars = pd.get_dummies(X_vars, columns=vars_cat_reg, drop_first=True, dtype=float)
+            X_vars = sm.add_constant(X_vars)
+
+            # ===================== INÍCIO DA CORREÇÃO (VERIFICAÇÃO DE DADOS) =====================
+            num_observations = X_vars.shape[0]
+            num_predictors = X_vars.shape[1]
+
+            if num_observations <= num_predictors:
+                st.error(f"Dados insuficientes para o modelo. Após o preparo, há {num_observations} linhas e {num_predictors} preditores. O número de linhas deve ser maior que o número de preditores. Tente usar menos variáveis ou filtros menos restritivos.")
             else:
-                y = df_model['SalePrice']
-                X_vars = df_model[vars_cont + vars_cat_reg]
-
-                # Transformação logarítmica
-                if log_transform:
-                    y = np.log1p(y)
-                    for col in vars_cont:
-                        if pd.api.types.is_numeric_dtype(X_vars[col]):
-                             # Adicionar pequeno valor para evitar log(0) se houver zeros e a coluna for estritamente positiva
-                            if (X_vars[col] >= 0).all():
-                                X_vars[col] = np.log1p(X_vars[col])
-                            else: # Se pode ter negativos, não transformar ou usar outra estratégia
-                                st.warning(f"Variável {col} não transformada com log1p pois contém valores negativos.")
-
-
-                # Variáveis dummy para categóricas
-                X_vars = pd.get_dummies(X_vars, columns=vars_cat_reg, drop_first=True, dtype=float)
-                X_vars = sm.add_constant(X_vars) # Adicionar intercepto
-                
                 try:
                     model_reg = sm.OLS(y, X_vars).fit()
                     
@@ -346,16 +362,13 @@ elif aba == "📉 Etapa II – Regressão":
                     st.text(model_reg.summary())
                 
                     st.markdown("---")
-                    st.subheader("3. Métricas de Desempenho do Modelo")
+                    st.subheader("4. Métricas de Desempenho do Modelo")
                     y_pred = model_reg.predict(X_vars)
                     
-                    # Reverter o log para calcular o erro na escala original se a transformação foi aplicada
                     if log_transform:
                         y_true_orig = np.expm1(y)
                         y_pred_orig = np.expm1(y_pred)
-                        # Tratar possíveis NaNs ou Inf em y_pred_orig se expm1 resultar em valores muito grandes
                         y_pred_orig = np.nan_to_num(y_pred_orig, nan=np.nanmedian(y_pred_orig), posinf=np.nanmax(y_true_orig[np.isfinite(y_true_orig)]))
-
                     else:
                         y_true_orig = y
                         y_pred_orig = y_pred
@@ -366,100 +379,94 @@ elif aba == "📉 Etapa II – Regressão":
                     
                     m1, m2, m3 = st.columns(3)
                     m1.metric(label="R² Ajustado", value=f"{r2_adj:.4f}")
-                    m2.metric(label="RMSE (Erro Médio Quadrático)", value=f"<span class="math-inline">\{rmse\:,\.2f\}"\)
-m3\.metric\(label\="MAE \(Erro Médio Absoluto\)", value\=f"</span>{mae:,.2f}")
-                    st.markdown(f"*Discussão do Ajuste:* O modelo explica aproximadamente *{r2_adj:.1%}* da variância no preço de venda (transformado, se aplicável). O MAE indica que, em média, as previsões do modelo (na escala original) erram em *<span class="math-inline">\{mae\:,\.2f\}\\*\."\)
-st\.markdown\("\-\-\-"\)
-st\.subheader\("4\. Diagnóstico dos Pressupostos do Modelo"\)
-residuals\_reg \= model\_reg\.resid
-diag1, diag2 \= st\.columns\(2\)
-with diag1\:
-\# a\) Linearidade e Homocedasticidade \(Visual\)
-st\.markdown\("\\*a\) Linearidade e Homocedasticidade \(Visual\)\\*"\)
-fig\_res\_fit, ax\_res\_fit \= plt\.subplots\(\)
-sns\.scatterplot\(x\=model\_reg\.fittedvalues, y\=residuals\_reg, ax\=ax\_res\_fit, alpha\=0\.5\)
-ax\_res\_fit\.axhline\(0, color\='red', linestyle\='\-\-'\)
-ax\_res\_fit\.set\_xlabel\("Valores Ajustados"\)
-ax\_res\_fit\.set\_ylabel\("Resíduos"\)
-ax\_res\_fit\.set\_title\("Resíduos vs\. Valores Ajustados"\)
-st\.pyplot\(fig\_res\_fit\)
-st\.caption\("Ideal\: Pontos aleatoriamente dispersos em torno da linha horizontal em 0, sem padrões claros \(funil, curva\)\."\)
-\# b\) Normalidade dos Resíduos \(Shapiro\-Wilk\)
-st\.markdown\("\\*b\) Normalidade dos Resíduos\\*"\)
-if len\(residuals\_reg\) \> 2\:
-shapiro\_reg\_test \= stats\.shapiro\(residuals\_reg\)
-if shapiro\_reg\_test\.pvalue < 0\.05\:
-st\.warning\(f"P\-valor \(Shapiro\-Wilk\)\: \{shapiro\_reg\_test\.pvalue\:\.4f\}\. Os resíduos podem não ser normais\."\)
-else\:
-st\.success\(f"P\-valor \(Shapiro\-Wilk\)\: \{shapiro\_reg\_test\.pvalue\:\.4f\}\. Resíduos parecem normais\."\)
-fig\_qq\_reg \= sm\.qqplot\(residuals\_reg, line\='s', fit\=True\)
-plt\.title\("Q\-Q Plot dos Resíduos \(Regressão\)"\)
-st\.pyplot\(fig\_qq\_reg\)
-else\:
-st\.warning\("Não há resíduos suficientes para o teste de Shapiro\-Wilk na regressão\."\)
-with diag2\:
-\# c\) Homocedasticidade \(Teste de Breusch\-Pagan\)
-st\.markdown\("\\*c\) Homocedasticidade \(Teste Quantitativo\)\\*"\)
-try\:
-bp\_test \= het\_breuschpagan\(residuals\_reg, model\_reg\.model\.exog\)
-if bp\_test\[1\] < 0\.05\: \# p\-valor do teste F
-st\.warning\(f"P\-valor \(Breusch\-Pagan\)\: \{bp\_test\[1\]\:\.4f\}\. Há evidência de heterocedasticidade \(variância não constante dos resíduos\)\."\)
-else\:
-st\.success\(f"P\-valor \(Breusch\-Pagan\)\: \{bp\_test\[1\]\:\.4f\}\. Não há evidência significativa de heterocedasticidade\."\)
-except Exception as e\_bp\:
-st\.warning\(f"Não foi possível rodar o teste de Breusch\-Pagan\: \{e\_bp\}"\)
-\# d\) Multicolinearidade \(VIF\)
-st\.markdown\("\\*d\) Multicolinearidade \(VIF\)\\*"\)
-X\_vif \= X\_vars\.drop\('const', axis\=1, errors\='ignore'\) \# Remover constante para VIF
-if not X\_vif\.empty\:
-vif\_data \= pd\.DataFrame\(\)
-vif\_data\["Variável"\] \= X\_vif\.columns
-vif\_data\["VIF"\] \= \[variance\_inflation\_factor\(X\_vif\.values, i\) for i in range\(X\_vif\.shape\[1\]\)\]
-st\.dataframe\(vif\_data\[vif\_data\['VIF'\] \> 0\]\.style\.apply\( \# Mostrar apenas VIFs positivos
-lambda x\: \['background\-color\: \#FF7F7F' if v \> 5 else '' for v in x\], subset\=\['VIF'\]\)\)
-st\.caption\("VIF \> 5 pode indicar multicolinearidade\. VIF \> 10 é geralmente problemático\. Considere remover variáveis com VIF alto se os pressupostos forem afetados\."\)
-else\:
-st\.info\("Nenhuma variável para calcular VIF \(após remover constante\)\."\)
-st\.markdown\("\-\-\-"\)
-st\.subheader\("5\. Interpretação dos Coeficientes e Recomendações Práticas"\)
-coef\_df \= pd\.DataFrame\(\{
-'Coeficiente'\: model\_reg\.params,
-'Erro Padrão'\: model\_reg\.bse,
-'p\-valor'\: model\_reg\.pvalues
-\}\)\.reset\_index\(\)\.rename\(columns\=\{'index'\: 'Variável'\}\)
-st\.write\("Coeficientes do Modelo\:"\)
-st\.dataframe\(coef\_df\)
-coef\_significativos \= coef\_df\[\(coef\_df\['p\-valor'\] < 0\.05\) & \(coef\_df\['Variável'\] \!\= 'const'\)\]
-if not coef\_significativos\.empty\:
-st\.markdown\("\\*Recomendações e Insights \(baseado em variáveis com p\-valor < 0\.05\)\:\\*"\)
-for \_, row in coef\_significativos\.iterrows\(\)\:
-var, coef\_val \= row\['Variável'\], row\['Coeficiente'\]
-\# Ajustar a interpretação para dummies \(se o nome da variável contém o nome de uma das vars\_cat\_reg originais\)
-original\_cat\_var\_name \= next\(\(cat\_var for cat\_var in vars\_cat\_reg if cat\_var in var\), None\)
-if log\_transform\:
-impacto\_desc \= "aumenta" if coef\_val \> 0 else "reduz"
-if original\_cat\_var\_name\: \# É uma dummy de uma variável categórica original
-st\.markdown\(f"• Ser da categoria \\'\{var\.replace\(original\cat\_var\_name \+ '\', ''\)\}'\\ \(da variável '\{original\_cat\_var\_name\}'\), em comparação com a categoria base, \\\{impacto\_desc\}\\ o preço do imóvel em aproximadamente \\\{abs\(coef\_val\)\:\.2%\}\\, mantendo outras variáveis constantes\."\)
-elif var in vars\_cont\: \# É uma variável contínua transformada
-st\.markdown\(f"• Um aumento de 1% em \\'\{var\}'\\, mantendo outras variáveis constantes, \\\{impacto\_desc\}\\ o preço do imóvel em aproximadamente \\\{abs\(coef\_val\)\:\.2%\}\\\."\)
-else\: \# Caso geral \(pode ser uma dummy não pega pela lógica acima\)
-st\.markdown\(f"• \\\{var\}\\\: Impacto de elasticidade de \\\{coef\_val\:\.2f\}\\\. Um aumento de 1% está associado a uma mudança de \{coef\_val\:\.2%\} no preço\."\)
-else\: \# Modelo linear \(não log\-log\)
-impacto\_desc \= "aumenta" if coef\_val \> 0 else "reduz"
-if original\_cat\_var\_name\:
-st\.markdown\(f"• Ser da categoria \\'\{var\.replace\(original\cat\_var\_name \+ '\', ''\)\}'\\ \(da variável '\{original\_cat\_var\_name\}'\), em comparação com a categoria base, \\\{impacto\_desc\}\\ o preço do imóvel em \\</span>{abs(coef_val):,.0f}**, mantendo outras variáveis constantes.")
+                    m2.metric(label="RMSE (Erro Médio Quadrático)", value=f"${rmse:,.2f}")
+                    m3.metric(label="MAE (Erro Médio Absoluto)", value=f"${mae:,.2f}")
+                    st.markdown(f"*Discussão do Ajuste:* O modelo explica aproximadamente *{r2_adj:.1%}* da variância no preço de venda. O MAE indica que, em média, as previsões do modelo (na escala original) erram em *${mae:,.2f}*.")
+
+                    st.markdown("---")
+                    st.subheader("5. Diagnóstico dos Pressupostos do Modelo")
+                    residuals_reg = model_reg.resid
+
+                    diag1, diag2 = st.columns(2)
+                    with diag1:
+                        st.markdown("*a) Linearidade e Homocedasticidade (Visual)*")
+                        fig_res_fit, ax_res_fit = plt.subplots()
+                        sns.scatterplot(x=model_reg.fittedvalues, y=residuals_reg, ax=ax_res_fit, alpha=0.5)
+                        ax_res_fit.axhline(0, color='red', linestyle='--')
+                        ax_res_fit.set_xlabel("Valores Ajustados")
+                        ax_res_fit.set_ylabel("Resíduos")
+                        ax_res_fit.set_title("Resíduos vs. Valores Ajustados")
+                        st.pyplot(fig_res_fit)
+                        st.caption("Ideal: Pontos aleatoriamente dispersos em torno da linha 0.")
+
+                        st.markdown("*b) Normalidade dos Resíduos*")
+                        if len(residuals_reg) > 2:
+                            shapiro_reg_test = stats.shapiro(residuals_reg)
+                            if shapiro_reg_test.pvalue < 0.05:
+                                st.warning(f"P-valor (Shapiro-Wilk): {shapiro_reg_test.pvalue:.4f}. Resíduos podem não ser normais.")
+                            else:
+                                st.success(f"P-valor (Shapiro-Wilk): {shapiro_reg_test.pvalue:.4f}. Resíduos parecem normais.")
+                            fig_qq_reg = sm.qqplot(residuals_reg, line='s', fit=True)
+                            plt.title("Q-Q Plot dos Resíduos (Regressão)")
+                            st.pyplot(fig_qq_reg)
+                        else:
+                             st.warning("Não há resíduos suficientes para o teste de Shapiro-Wilk.")
+
+                    with diag2:
+                        st.markdown("*c) Homocedasticidade (Teste Quantitativo)*")
+                        try:
+                            bp_test = het_breuschpagan(residuals_reg, model_reg.model.exog)
+                            if bp_test[1] < 0.05:
+                                st.warning(f"P-valor (Breusch-Pagan): {bp_test[1]:.4f}. Há evidência de heterocedasticidade.")
+                            else:
+                                st.success(f"P-valor (Breusch-Pagan): {bp_test[1]:.4f}. Não há evidência de heterocedasticidade.")
+                        except Exception as e_bp:
+                            st.warning(f"Não foi possível rodar o teste de Breusch-Pagan: {e_bp}")
+                        
+                        st.markdown("*d) Multicolinearidade (VIF)*")
+                        X_vif = X_vars.drop('const', axis=1, errors='ignore')
+                        if not X_vif.empty:
+                            vif_data = pd.DataFrame()
+                            vif_data["Variável"] = X_vif.columns
+                            vif_data["VIF"] = [variance_inflation_factor(X_vif.values, i) for i in range(X_vif.shape[1])]
+                            st.dataframe(vif_data[vif_data['VIF'] > 0].style.apply(
+                                lambda x: ['background-color: #FF7F7F' if v > 5 else '' for v in x], subset=['VIF']))
+                            st.caption("VIF > 5 pode indicar multicolinearidade.")
+                        else:
+                            st.info("Nenhuma variável para calcular VIF.")
+
+                    st.markdown("---")
+                    st.subheader("6. Interpretação dos Coeficientes e Recomendações Práticas")
+                    coef_df = pd.DataFrame({'Coeficiente': model_reg.params, 'p-valor': model_reg.pvalues}).reset_index().rename(columns={'index': 'Variável'})
+                    
+                    coef_significativos = coef_df[(coef_df['p-valor'] < 0.05) & (coef_df['Variável'] != 'const')]
+                    
+                    if not coef_significativos.empty:
+                        st.markdown("*Recomendações e Insights (baseado em variáveis com p-valor < 0.05):*")
+                        for _, row in coef_significativos.iterrows():
+                            var, coef_val = row['Variável'], row['Coeficiente']
+                            original_cat_var_name = next((cat_var for cat_var in vars_cat_reg if cat_var in var), None)
+
+                            if log_transform:
+                                impacto_desc = "aumenta" if coef_val > 0 else "reduz"
+                                if original_cat_var_name:
+                                    st.markdown(f"• Ser da categoria *'{var.replace(original_cat_var_name + '_', '')}'* *{impacto_desc}* o preço em *{abs(coef_val):.2%}*.")
                                 elif var in vars_cont:
-                                    st.markdown(f"• Um aumento de uma unidade em *'{var}', mantendo outras variáveis constantes, *{impacto_desc}* o preço do imóvel em *<span class="math-inline">\{abs\(coef\_val\)\:,\.0f\}\\\."\)
-else\:
-st\.markdown\(f"• \\\{var\}\\\: Impacto de \\</span>{coef_val:,.0f}** no preço para cada unidade de aumento.")
-                        st.caption("Interpretações de variáveis dummy são relativas à categoria base omitida. A transformação logarítmica permite interpretação percentual.")
+                                    st.markdown(f"• Um aumento de 1% em *'{var}'* *{impacto_desc}* o preço em *{abs(coef_val):.2%}*.")
+                            else:
+                                impacto_desc = "aumenta" if coef_val > 0 else "reduz"
+                                if original_cat_var_name:
+                                    st.markdown(f"• Ser da categoria *'{var.replace(original_cat_var_name + '_', '')}'* *{impacto_desc}* o preço em *${abs(coef_val):,.0f}*.")
+                                elif var in vars_cont:
+                                    st.markdown(f"• Um aumento de uma unidade em *'{var}'* *{impacto_desc}* o preço em *${abs(coef_val):,.0f}*.")
+                        st.caption("Interpretações são ceteris paribus (mantendo outras variáveis constantes).")
                     else:
-                        st.warning("Nenhuma variável selecionada apresentou impacto estatisticamente significativo no preço (com p-valor < 0.05).")
+                        st.warning("Nenhuma variável selecionada apresentou impacto estatisticamente significativo.")
                 
                 except Exception as e_reg:
-                    st.error(f"Erro ao ajustar o modelo de regressão ou em seus diagnósticos: {e_reg}")
-        elif not ((len(vars_cont) + len(vars_cat_reg)) >= 4 and (len(vars_cont) + len(vars_cat_reg)) <= 6):
-             st.warning("Por favor, selecione um total de 4 a 6 variáveis explicativas (entre contínuas e categóricas).")
+                    st.error(f"Erro ao ajustar o modelo de regressão: {e_reg}")
+            # ===================== FIM DA CORREÇÃO (VERIFICAÇÃO DE DADOS) =====================
+
         else:
             st.warning("Por favor, selecione pelo menos uma variável contínua e uma categórica para a análise de regressão.")
 
@@ -468,8 +475,7 @@ st\.markdown\(f"• \\\{var\}\\\: Impacto de \\</span>{coef_val:,.0f}** no preç
 elif aba == "📘 Sobre o Projeto":
     st.header("📘 Sobre o Projeto e Autoria")
     st.markdown("""
-    Este dashboard interativo foi desenvolvido como parte da disciplina de Estatística Aplicada, com o objetivo de analisar os fatores que influenciam o preço de imóveis na cidade de Ames, Iowa, utilizando técnicas de ANOVA e Regressão Linear Múltipla.
-    O projeto permite a exploração dinâmica dos dados, verificação de pressupostos estatísticos e geração de insights práticos para o mercado imobiliário.
+    Este dashboard interativo foi desenvolvido como parte da disciplina de Sistemas de Informações em Engenharia de Produção, com o objetivo de analisar os fatores que influenciam o preço de imóveis na cidade de Ames, Iowa, utilizando técnicas de ANOVA e Regressão Linear Múltipla.
     
     *Autores:* Pedro Russo e Daniel Vianna
     """)
@@ -477,23 +483,7 @@ elif aba == "📘 Sobre o Projeto":
     st.markdown("---")
     st.subheader("📌 Funcionalidades e Requisitos Atendidos")
     st.markdown("""
-    - ✔️ *Análise Exploratória e Comparativa com ANOVA (Etapa I)*:
-        - Seleção de 2-3 variáveis categóricas (sequencialmente).
-        - Aplicação de ANOVA.
-        - Verificação de pressupostos: Normalidade dos Resíduos (Shapiro-Wilk, Gráfico Q-Q) e Homocedasticidade (Teste de Levene).
-        - Abordagem robusta (Kruskal-Wallis) se pressupostos não atendidos.
-        - Interpretação dos resultados para tomada de decisão.
-    - ✔️ *Modelagem Preditiva com Regressão Linear (Etapa II)*:
-        - Seleção de 4-6 variáveis explicativas (≥1 contínua, ≥1 categórica com dummies).
-        - Regressão Linear Múltipla (sem interações).
-        - Opção de transformação logarítmica (modelo log-log) na dependente e contínuas.
-        - Diagnóstico dos pressupostos: Linearidade (visual com resíduos vs. ajustados), Normalidade (Shapiro-Wilk, Q-Q plot), Homocedasticidade (Breusch-Pagan, visual), Multicolinearidade (VIF).
-        - Métricas de desempenho: R² Ajustado, RMSE, MAE, com discussão.
-        - Interpretação detalhada dos coeficientes (incluindo contexto log-log e significância).
-        - Recomendações práticas baseadas no modelo.
-    - ✔️ *Bônus de Inovação*:
-        - Dashboard interativo em Streamlit.
-        - Visualização de dados.
-        - Execução dinâmica de análises com filtros.
-        - Exibição de gráficos, diagnósticos e interpretações diretamente no app.
+    - ✔️ *Análise Exploratória e Comparativa com ANOVA (Etapa I)*
+    - ✔️ *Modelagem Preditiva com Regressão Linear (Etapa II)*
+    - ✔️ *Bônus de Inovação*: Dashboard interativo, filtros, gráficos e interpretações.
     """)
